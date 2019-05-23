@@ -1,0 +1,147 @@
+cd ~ 
+git clone https://github.com/vgargxpanxion/BlockChain_FutureGroup.git
+
+sudo pip install awscli --upgrade
+
+export REGION=us-east-1
+export NETWORKID=n-ELLMVLMBI5G4JLGU33JF2SNQBU
+export NETWORKNAME=BVN5
+
+export VPCENDPOINTSERVICENAME=$(aws managedblockchain get-network --region $REGION --network-id $NETWORKID --query 'Network.VpcEndpointServiceName' --output text)
+echo $VPCENDPOINTSERVICENAME
+
+
+
+cd ~/BlockChain_FutureGroup/ngo-fabric
+chmod +x ./3-vpc-client-node.sh
+./3-vpc-client-node.sh
+
+
+cd ~
+ssh ec2-user@ec2-3-80-2-142.compute-1.amazonaws.com -i ~/BVN5-keypair.pem
+
+
+cd ~ 
+git clone https://github.com/vgargxpanxion/BlockChain_FutureGroup.git
+
+cd ~/BlockChain_FutureGroup/ngo-fabric
+cp templates/exports-template.sh fabric-exports.sh
+vi fabric-exports.sh
+
+cd ~/BlockChain_FutureGroup/ngo-fabric
+source fabric-exports.sh
+
+echo $PEERSERVICEENDPOINT
+
+cat ~/peer-exports.sh
+
+source ~/peer-exports.sh 
+
+aws s3 cp s3://us-east-1.managedblockchain/etc/managedblockchain-tls-chain.pem  /home/ec2-user/managedblockchain-tls-chain.pem
+
+export PATH=$PATH:/home/ec2-user/go/src/github.com/hyperledger/fabric-ca/bin
+cd ~
+fabric-ca-client enroll -u https://$ADMINUSER:$ADMINPWD@$CASERVICEENDPOINT --tls.certfiles /home/ec2-user/managedblockchain-tls-chain.pem -M /home/ec2-user/admin-msp 
+
+
+mkdir -p /home/ec2-user/admin-msp/admincerts
+cp ~/admin-msp/signcerts/* ~/admin-msp/admincerts/
+cd ~/BlockChain_FutureGroup/ngo-fabric
+
+echo $MEMBERID
+
+
+cp ~/BlockChain_FutureGroup/ngo-fabric/configtx.yaml ~
+vi ~/configtx.yaml
+
+/// create channel
+
+docker exec cli configtxgen -outputCreateChannelTx /opt/home/$CHANNEL.pb -profile OneOrgChannel -channelID $CHANNEL --configPath /opt/home/
+
+ls -lt ~/$CHANNEL.pb 
+
+docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer channel create -c $CHANNEL -f /opt/home/$CHANNEL.pb -o $ORDERER --cafile $CAFILE --tls --timeout 900s
+	
+	ls -lt /home/ec2-user/fabric-samples/chaincode/hyperledger/fabric/peer
+	
+	// Join peer Node
+	
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer channel join -b $CHANNEL.block  -o $ORDERER --cafile $CAFILE --tls
+
+
+						 //  install chanincod e
+						 
+						 docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+							-e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+							cli peer chaincode install -n $CHAINCODENAME -v $CHAINCODEVERSION -p $CHAINCODEDIR
+							
+							
+							 Instantiate the chaincode on the channel
+							 docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+							-e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+							cli peer chaincode instantiate -o $ORDERER -C $CHANNEL -n $CHAINCODENAME -v $CHAINCODEVERSION \
+							-c '{"Args":["init","a","100","b","200"]}' --cafile $CAFILE --tls
+							 
+							  Query the chaincode
+							  
+							  docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+							-e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+							cli peer chaincode query -C $CHANNEL -n $CHAINCODENAME -c '{"Args":["query","a"]}' 
+							
+
+						 Invoke a transaction
+						docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+							-e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+							cli peer chaincode invoke -o $ORDERER -C $CHANNEL -n $CHAINCODENAME \
+							-c '{"Args":["invoke","a","b","10"]}' --cafile $CAFILE --tls
+
+
+						verifty transaction
+
+						docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+							-e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+							cli peer chaincode query -C $CHANNEL -n $CHAINCODENAME -c '{"Args":["query","a"]}' 
+
+
+
+	// Our NodeJS implementation
+	cd ~
+	mkdir -p ./fabric-samples/chaincode/bvn
+	cp ./BlockChain_FutureGroup/ngo-chaincode/src/* ./fabric-samples/chaincode/bvn
+	
+	
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" -e "CORE_PEER_ADDRESS=$PEER"  \
+    cli peer chaincode install -n ngo -l node -v v0 -p /opt/gopath/src/github.com/bvn
+	
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" -e "CORE_PEER_ADDRESS=$PEER"  \
+    cli peer chaincode instantiate -o $ORDERER -C mychannel -n ngo -v v0 -c '{"Args":["init"]}' --cafile /opt/home/managedblockchain-tls-chain.pem --tls
+	
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer chaincode query -C mychannel -n ngo -c '{"Args":["queryAllDonors"]}'
+	
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer chaincode invoke -C mychannel -n ngo \
+    -c  '{"Args":["createDonor","{\"donorUserName\": \"edge\", \"email\": \"edge@def.com\", \"registeredDate\": \"2018-10-22T11:52:20.182Z\"}"]}' -o $ORDERER --cafile /opt/home/managedblockchain-tls-chain.pem --tls
+
+docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem" \
+    -e "CORE_PEER_ADDRESS=$PEER" -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer chaincode invoke -C mychannel -n ngo \
+    -c  '{"Args":["createDonor","{\"donorUserName\": \"braendle\", \"email\": \"braendle@def.com\", \"registeredDate\": \"2018-11-05T14:31:20.182Z\"}"]}' -o $ORDERER --cafile /opt/home/managedblockchain-tls-chain.pem --tls
+	
+	
+	
+	/// every transaction adds a new block 
+	docker exec -e "CORE_PEER_TLS_ENABLED=true" -e "CORE_PEER_TLS_ROOTCERT_FILE=/opt/home/managedblockchain-tls-chain.pem"  \
+    -e "CORE_PEER_ADDRESS=$PEER"  -e "CORE_PEER_LOCALMSPID=$MSP" -e "CORE_PEER_MSPCONFIGPATH=$MSP_PATH" \
+    cli peer channel fetch newest /opt/home/fabric-samples/chaincode/hyperledger/fabric/peer/$CHANNEL.block \
+    -c $CHANNEL -o $ORDERER --cafile /opt/home/managedblockchain-tls-chain.pem --tls 
+	
+	
